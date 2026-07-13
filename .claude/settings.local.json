@@ -24,7 +24,11 @@
       "Bash(.venv/bin/python manage.py test chat -v1)",
       "Bash(RUN_AGENT_TESTS=1 .venv/bin/python manage.py test chat.tests.AgentSmokeTest -v2)",
       "Bash(curl -s -o /dev/null -w \"django http://127.0.0.1:8000/ -> %{http_code}\\\\n\" http://127.0.0.1:8000/)",
-      "Bash(curl -s -o /dev/null -w \"ollama http://127.0.0.1:11434/ -> %{http_code}\\\\n\" http://127.0.0.1:11434/)"
+      "Bash(curl -s -o /dev/null -w \"ollama http://127.0.0.1:11434/ -> %{http_code}\\\\n\" http://127.0.0.1:11434/)",
+      "Bash(git symbolic-ref *)",
+      "Bash(git add *)",
+      "Bash(git rm *)",
+      "Bash(git commit -q -m ' *)"
     ]
   }
 }
