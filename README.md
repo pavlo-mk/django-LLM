@@ -26,17 +26,18 @@ Browser ──HTTP──▶ Django views ──▶ agent.graph (LangGraph ReAct)
 
 ## Prerequisites
 
-- Python 3.12+ (developed on 3.14)
+- [uv](https://docs.astral.sh/uv/) (`brew install uv`) — manages Python + deps
 - Docker (for Postgres)
 - [Ollama](https://ollama.com) installed natively (`brew install ollama` on macOS —
   native gives Metal GPU acceleration; Docker Ollama is CPU-only on Mac)
 
+uv installs a matching Python (3.12+) itself, so you don't need one preinstalled.
+
 ## Setup
 
 ```bash
-# 1. Python deps
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+# 1. Python + deps (creates .venv from uv.lock)
+uv sync
 
 # 2. Environment
 cp .env.example .env          # tweak if the default ports clash
@@ -49,10 +50,13 @@ ollama serve &                # or run the Ollama.app
 ollama pull llama3.2
 
 # 5. Django
-python manage.py migrate
-python manage.py createsuperuser   # optional, for /admin
-python manage.py runserver
+uv run python manage.py migrate
+uv run python manage.py createsuperuser   # optional, for /admin
+uv run python manage.py runserver
 ```
+
+Prefix Django/tooling commands with `uv run`, or activate the env once with
+`source .venv/bin/activate`.
 
 Open http://127.0.0.1:8000/ and chat. Toggle **stream** to switch between
 streaming and blocking responses. The Django admin at `/admin/` shows the
@@ -88,9 +92,28 @@ streaming and blocking responses. The Django admin at `/admin/` shows the
 ## Tests
 
 ```bash
-python manage.py test              # fast, offline (agent calls are mocked)
-RUN_AGENT_TESTS=1 python manage.py test chat.tests.AgentSmokeTest   # live Ollama
+uv run python manage.py test              # fast, offline (agent calls are mocked)
+RUN_AGENT_TESTS=1 uv run python manage.py test chat.tests.AgentSmokeTest   # live Ollama
 ```
+
+## Code quality
+
+Linting/formatting is [ruff](https://docs.astral.sh/ruff/) and type checking is
+[mypy](https://mypy-lang.org/); both are configured in `pyproject.toml`.
+
+```bash
+uv run ruff check .           # lint (PEP 8 / pyflakes / import order / pyupgrade)
+uv run ruff format .          # auto-format (add --check to only verify)
+uv run mypy .                 # static type check
+```
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every pull request to `main` (and on pushes
+to `main`). It spins up a Postgres service, installs deps with `uv sync
+--frozen`, then runs, in order: `ruff check`, `ruff format --check`, `mypy`,
+`manage.py check`, and the test suite. The live Ollama test is skipped in CI
+(no model available) — it only runs locally with `RUN_AGENT_TESTS=1`.
 
 ## Configuration
 

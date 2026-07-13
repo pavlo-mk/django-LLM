@@ -5,10 +5,12 @@ LLM (which may emit tool calls) and a tool executor — looping until the model
 answers without calling a tool. The model is served locally by Ollama.
 """
 
+from collections.abc import Iterator
 from functools import lru_cache
 
 from django.conf import settings
 from langchain_core.messages import AIMessageChunk
+from langchain_core.runnables import RunnableConfig
 from langchain_ollama import ChatOllama
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import create_react_agent
@@ -43,12 +45,12 @@ def get_agent() -> CompiledStateGraph:
 def run(thread_id: str, message: str) -> str:
     """Run the agent to completion for one user turn and return the reply text."""
     agent = get_agent()
-    config = {"configurable": {"thread_id": thread_id}}
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
     result = agent.invoke({"messages": [{"role": "user", "content": message}]}, config)
     return result["messages"][-1].content
 
 
-def stream_tokens(thread_id: str, message: str):
+def stream_tokens(thread_id: str, message: str) -> Iterator[str]:
     """Yield assistant token strings as the agent produces them.
 
     Uses ``stream_mode="messages"`` which emits ``(chunk, metadata)`` for every
@@ -56,11 +58,14 @@ def stream_tokens(thread_id: str, message: str):
     (``AIMessageChunk``) so raw tool results never leak into the reply.
     """
     agent = get_agent()
-    config = {"configurable": {"thread_id": thread_id}}
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
     for chunk, _metadata in agent.stream(
         {"messages": [{"role": "user", "content": message}]},
         config,
         stream_mode="messages",
     ):
-        if isinstance(chunk, AIMessageChunk) and chunk.content:
-            yield chunk.content
+        if not isinstance(chunk, AIMessageChunk):
+            continue
+        content = chunk.content
+        if isinstance(content, str) and content:
+            yield content

@@ -39,7 +39,9 @@ def get_checkpointer() -> PostgresSaver:
                     "row_factory": dict_row,
                 },
             )
-            checkpointer = PostgresSaver(_pool)
+            # row_factory=dict_row is set via kwargs above, but the pool's
+            # generic type still reads as tuple-rows to the type checker.
+            checkpointer = PostgresSaver(_pool)  # type: ignore[arg-type]
             checkpointer.setup()
             _checkpointer = checkpointer
 

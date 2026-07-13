@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: lint, type-check & test
+    runs-on: ubuntu-latest
+
+    env:
+      # Django / app config
+      DJANGO_SECRET_KEY: ci-secret-key
+      DJANGO_SETTINGS_MODULE: config.settings
+      # Point Django + the checkpointer at the Postgres service below.
+      POSTGRES_DB: djllm
+      POSTGRES_USER: djllm
+      POSTGRES_PASSWORD: djllm
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: djllm
+          POSTGRES_USER: djllm
+          POSTGRES_PASSWORD: djllm
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: uv sync --dev --frozen
+
+      - name: Ruff lint (PEP 8, pyflakes, imports)
+        run: uv run ruff check .
+
+      - name: Ruff format check
+        run: uv run ruff format --check .
+
+      - name: mypy type check
+        run: uv run mypy .
+
+      - name: Django system checks
+        run: uv run python manage.py check
+
+      - name: Run tests
+        run: uv run python manage.py test --verbosity 2

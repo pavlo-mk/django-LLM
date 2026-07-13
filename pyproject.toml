@@ -1,0 +1,44 @@
+[project]
+name = "dj-llm"
+version = "0.1.0"
+description = "Django + LangGraph agent test project"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "django>=6.0,<7",
+    "psycopg[binary]>=3.3",
+    "langgraph>=1.2",
+    "langchain-ollama>=1.1",
+    "langgraph-checkpoint-postgres>=3.1",
+    "python-dotenv>=1.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.9",
+    "mypy>=1.13",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["*/migrations/*"]
+
+[tool.ruff.lint]
+# E/W: pycodestyle (PEP 8), F: pyflakes, I: import sorting,
+# UP: pyupgrade, B: bugbear.
+select = ["E", "W", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["agent", "chat", "config"]
+exclude = ['migrations/']
+ignore_missing_imports = true      # langgraph/langchain/psycopg have no stubs
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+[[tool.mypy.overrides]]
+# Django adds attributes at runtime that static analysis can't see.
+module = ["*.migrations.*"]
+ignore_errors = true
