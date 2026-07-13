@@ -104,3 +104,6 @@ Postgres connection, `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, and an optional
 - Add real tools (web search, DB lookups over your Django models).
 - Serve under ASGI (`uvicorn config.asgi:application`) for true async streaming.
 - Add per-user threads by attaching `Thread` to `request.user`.
+
+<img width="756" height="643" alt="image" src="https://github.com/user-attachments/assets/e44e60aa-4400-4522-9be7-1bc6723ed377" />
+
