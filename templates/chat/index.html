@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Django + LangGraph chat</title>
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      margin: 0; display: flex; flex-direction: column; height: 100vh;
+      background: Canvas; color: CanvasText;
+    }
+    header {
+      padding: .75rem 1rem; border-bottom: 1px solid #8883;
+      display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+    }
+    header h1 { font-size: 1rem; margin: 0; font-weight: 600; }
+    header .muted { color: #8888; font-size: .8rem; }
+    header .spacer { flex: 1; }
+    button, select, input {
+      font: inherit; padding: .4rem .6rem; border-radius: 6px;
+      border: 1px solid #8886; background: Canvas; color: CanvasText;
+    }
+    button { cursor: pointer; }
+    button.primary { background: #2563eb; color: white; border-color: #2563eb; }
+    label.toggle { font-size: .85rem; display: flex; align-items: center; gap: .35rem; }
+    #messages { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: .75rem; }
+    .msg { max-width: 70ch; padding: .6rem .8rem; border-radius: 10px; white-space: pre-wrap; line-height: 1.4; }
+    .msg.user { align-self: flex-end; background: #2563eb; color: white; }
+    .msg.assistant { align-self: flex-start; background: #8882; }
+    .msg.assistant.pending { opacity: .7; }
+    form { display: flex; gap: .5rem; padding: 1rem; border-top: 1px solid #8883; }
+    form input[type=text] { flex: 1; }
+    .empty { color: #8888; margin: auto; text-align: center; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Django + LangGraph</h1>
+    <span class="muted">model: {{ model }}</span>
+    <div class="spacer"></div>
+    <label class="toggle"><input type="checkbox" id="streamToggle" checked> stream</label>
+    <button id="newChat">+ New chat</button>
+  </header>
+
+  <div id="messages">
+    <div class="empty">Start a new chat and ask, e.g. <em>"What is 23 × 19, and what time is it?"</em></div>
+  </div>
+
+  <form id="chatForm">
+    <input type="text" id="input" placeholder="Type a message…" autocomplete="off" required>
+    <button class="primary" type="submit" id="send">Send</button>
+  </form>
+
+  <script>
+    const messagesEl = document.getElementById("messages");
+    const form = document.getElementById("chatForm");
+    const input = document.getElementById("input");
+    const sendBtn = document.getElementById("send");
+    const streamToggle = document.getElementById("streamToggle");
+    let threadId = null;
+
+    function csrf() {
+      const m = document.cookie.match(/csrftoken=([^;]+)/);
+      return m ? m[1] : "";
+    }
+
+    function addMessage(role, text, opts = {}) {
+      if (messagesEl.querySelector(".empty")) messagesEl.innerHTML = "";
+      const el = document.createElement("div");
+      el.className = "msg " + role + (opts.pending ? " pending" : "");
+      el.textContent = text;
+      messagesEl.appendChild(el);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      return el;
+    }
+
+    async function ensureThread() {
+      if (threadId) return threadId;
+      const res = await fetch("/api/threads/", {
+        method: "POST",
+        headers: { "X-CSRFToken": csrf() },
+      });
+      threadId = (await res.json()).thread_id;
+      return threadId;
+    }
+
+    async function newChat() {
+      threadId = null;
+      messagesEl.innerHTML = '<div class="empty">New chat — say hello 👋</div>';
+    }
+
+    async function sendStreaming(text) {
+      const tid = await ensureThread();
+      addMessage("user", text);
+      const bubble = addMessage("assistant", "", { pending: true });
+      const url = `/api/threads/${tid}/stream/?message=` + encodeURIComponent(text);
+      const es = new EventSource(url);
+      es.onmessage = (e) => {
+        bubble.textContent += JSON.parse(e.data);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      };
+      es.addEventListener("done", () => { es.close(); finish(bubble); });
+      es.onerror = () => { es.close(); finish(bubble); };
+    }
+
+    async function sendBlocking(text) {
+      const tid = await ensureThread();
+      addMessage("user", text);
+      const bubble = addMessage("assistant", "…", { pending: true });
+      const res = await fetch("/api/chat/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": csrf() },
+        body: JSON.stringify({ thread_id: tid, message: text }),
+      });
+      const data = await res.json();
+      bubble.textContent = data.reply;
+      finish(bubble);
+    }
+
+    function finish(bubble) {
+      bubble.classList.remove("pending");
+      sendBtn.disabled = false;
+      input.focus();
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = "";
+      sendBtn.disabled = true;
+      try {
+        if (streamToggle.checked) await sendStreaming(text);
+        else await sendBlocking(text);
+      } catch (err) {
+        addMessage("assistant", "⚠️ " + err);
+        sendBtn.disabled = false;
+      }
+    });
+
+    document.getElementById("newChat").addEventListener("click", newChat);
+  </script>
+</body>
+</html>
