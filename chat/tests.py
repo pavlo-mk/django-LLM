@@ -7,7 +7,8 @@ An end-to-end smoke test that actually calls the model lives behind a flag.
 import os
 from unittest.mock import patch
 
-from django.test import TestCase
+import pytest
+from django.test import AsyncClient, TestCase
 
 from agent.tools import add, current_time, multiply, word_count
 
@@ -61,18 +62,34 @@ class ChatViewTests(TestCase):
         )
         self.assertEqual(res.status_code, 400)
 
-    @patch("agent.graph.stream_tokens", return_value=iter(["Hel", "lo"]))
-    def test_stream_emits_sse_and_persists(self, mock_stream):
-        thread = Thread.objects.create()
-        res = self.client.get(f"/api/threads/{thread.thread_id}/stream/?message=hi")
-        body = b"".join(res.streaming_content).decode()
-        self.assertEqual(res["Content-Type"], "text/event-stream")
-        self.assertIn('data: "Hel"', body)
-        self.assertIn('data: "lo"', body)
-        self.assertIn("event: done", body)
-        # the concatenated stream is saved as one assistant message
-        assistant = thread.messages.get(role=Message.Role.ASSISTANT)
-        self.assertEqual(assistant.content, "Hello")
+
+@pytest.mark.django_db(transaction=True)
+async def test_stream_emits_sse_and_persists(monkeypatch):
+    """The async SSE endpoint streams tokens and persists the full reply."""
+
+    async def fake_astream(thread_id, message):
+        for token in ["Hel", "lo"]:
+            yield token
+
+    monkeypatch.setattr("agent.graph.astream_tokens", fake_astream)
+
+    thread = await Thread.objects.acreate()
+    client = AsyncClient()
+    res = await client.get(f"/api/threads/{thread.thread_id}/stream/?message=hi")
+
+    body = b""
+    async for chunk in res.streaming_content:
+        body += chunk
+    text = body.decode()
+
+    assert res["Content-Type"] == "text/event-stream"
+    assert 'data: "Hel"' in text
+    assert 'data: "lo"' in text
+    assert "event: done" in text
+
+    # the concatenated stream is saved as one assistant message
+    assistant = await Message.objects.aget(thread=thread, role=Message.Role.ASSISTANT)
+    assert assistant.content == "Hello"
 
 
 class AgentSmokeTest(TestCase):

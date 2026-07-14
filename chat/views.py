@@ -2,6 +2,7 @@ import json
 
 from django.conf import settings
 from django.http import (
+    Http404,
     HttpResponseBadRequest,
     JsonResponse,
     StreamingHttpResponse,
@@ -24,6 +25,12 @@ def index(request):
         "chat/index.html",
         {"threads": threads, "model": settings.OLLAMA_MODEL},
     )
+
+
+@require_GET
+def healthz(request):
+    """Liveness probe used by the container healthcheck."""
+    return JsonResponse({"status": "ok"})
 
 
 @require_POST
@@ -58,26 +65,31 @@ def chat(request):
     return JsonResponse({"reply": reply})
 
 
-@require_GET
-def stream(request, thread_id):
-    """Streaming turn over Server-Sent Events (consumed by EventSource)."""
+async def stream(request, thread_id):
+    """Streaming turn over Server-Sent Events (async, consumed by EventSource)."""
+    if request.method != "GET":
+        return HttpResponseBadRequest("GET only")
     text = (request.GET.get("message") or "").strip()
     if not text:
         return HttpResponseBadRequest("message is required")
 
-    thread = get_object_or_404(Thread, thread_id=thread_id)
-    Message.objects.create(thread=thread, role=Message.Role.USER, content=text)
-    _touch_title(thread, text)
+    try:
+        thread = await Thread.objects.aget(thread_id=thread_id)
+    except Thread.DoesNotExist as exc:
+        raise Http404("thread not found") from exc
 
-    def event_stream():
-        collected = []
+    await Message.objects.acreate(thread=thread, role=Message.Role.USER, content=text)
+    await _atouch_title(thread, text)
+
+    async def event_stream():
+        collected: list[str] = []
         try:
-            for token in graph.stream_tokens(str(thread.thread_id), text):
+            async for token in graph.astream_tokens(str(thread.thread_id), text):
                 collected.append(token)
                 yield _sse(token)
         finally:
             # Persist whatever we produced, even if the client disconnects.
-            Message.objects.create(
+            await Message.objects.acreate(
                 thread=thread,
                 role=Message.Role.ASSISTANT,
                 content="".join(collected),
@@ -101,3 +113,9 @@ def _touch_title(thread: Thread, text: str) -> None:
     if not thread.title:
         thread.title = text[:80]
     thread.save()
+
+
+async def _atouch_title(thread: Thread, text: str) -> None:
+    if not thread.title:
+        thread.title = text[:80]
+    await thread.asave()
