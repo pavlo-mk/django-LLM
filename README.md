@@ -163,6 +163,11 @@ uv run pytest                                  # or: make test
 RUN_AGENT_TESTS=1 uv run pytest chat/tests.py::AgentSmokeTest   # live Ollama
 ```
 
+Coverage is enforced two ways: CI fails if **overall** coverage drops below 85%
+(`--cov-fail-under=85`), and `codecov.yml` requires **patch** coverage of 100%
+(every line changed in a PR must be covered). Add `codecov/patch` as a required
+status check in branch protection to actually block merges on it.
+
 ## Code quality
 
 Linting/formatting is [ruff](https://docs.astral.sh/ruff/) and type checking is

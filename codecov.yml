@@ -1,0 +1,27 @@
+# Codecov configuration. Validate with:
+#   curl -X POST --data-binary @codecov.yml https://codecov.io/validate
+coverage:
+  status:
+    # Overall coverage: don't regress (with a small tolerance).
+    project:
+      default:
+        target: auto
+        threshold: 1%
+    # Patch = the lines changed in a PR. Require every changed line to be
+    # covered before the PR can merge (add codecov/patch as a required check).
+    patch:
+      default:
+        target: 100%
+
+comment:
+  layout: "reason, diff, files"
+  require_changes: false
+
+# Only agent/ and chat/ are measured (see [tool.coverage.run] in pyproject),
+# but ignore these explicitly too so Codecov never counts them.
+ignore:
+  - "**/migrations/**"
+  - "**/tests.py"
+  - "config/asgi.py"
+  - "config/wsgi.py"
+  - "manage.py"
