@@ -3,7 +3,7 @@
 # ---- builder: install deps + project into a self-contained .venv ----------
 # We build against the same python image used at runtime so the resulting
 # .venv is portable (its interpreter path exists in the runtime stage).
-FROM python:3.13-slim-bookworm AS builder
+FROM python:3.14-slim-bookworm AS builder
 
 # Bring in the uv binary from Astral's published image.
 COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /uvx /bin/
@@ -27,7 +27,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
 # ---- runtime: minimal image with just the venv + code ---------------------
-FROM python:3.13-slim-bookworm AS runtime
+FROM python:3.14-slim-bookworm AS runtime
 
 # Run as a non-root user.
 RUN groupadd --system app && useradd --system --gid app --create-home app
