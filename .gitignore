@@ -8,6 +8,7 @@ __pycache__/
 *.log
 db.sqlite3
 staticfiles/
+media/
 
 # Test / tooling caches
 .pytest_cache/
@@ -19,6 +20,8 @@ htmlcov/
 
 # Env / secrets
 .env
+.env.*
+!.env.example
 
 # IDE / OS
 .idea/

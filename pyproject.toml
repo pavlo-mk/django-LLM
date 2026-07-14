@@ -56,9 +56,31 @@ target-version = "py312"
 extend-exclude = ["*/migrations/*"]
 
 [tool.ruff.lint]
-# E/W: pycodestyle (PEP 8), F: pyflakes, I: import sorting,
-# UP: pyupgrade, B: bugbear.
-select = ["E", "W", "F", "I", "UP", "B"]
+select = [
+    "E", "W",   # pycodestyle (PEP 8)
+    "F",        # pyflakes
+    "I",        # import sorting (isort)
+    "UP",       # pyupgrade (modernize syntax)
+    "B",        # bugbear (likely bugs)
+    "C4",       # flake8-comprehensions
+    "SIM",      # flake8-simplify
+    "RET",      # flake8-return
+    "PIE",      # flake8-pie (misc lints)
+    "N",        # pep8-naming
+    "DJ",       # flake8-django
+    "ASYNC",    # async gotchas (e.g. blocking calls in async code)
+    "S",        # flake8-bandit (security)
+    "PTH",      # prefer pathlib over os.path
+    "LOG", "G", # logging correctness
+    "RUF",      # ruff-specific rules
+]
+
+[tool.ruff.lint.per-file-ignores]
+"chat/tests.py" = ["S101"]            # asserts are the point of tests
+"config/appconfig.py" = ["S105"]      # documented insecure dev defaults
+# Django uses declarative class-level list/tuple attributes by design.
+"chat/models.py" = ["RUF012"]
+"chat/admin.py" = ["RUF012"]
 
 [tool.mypy]
 python_version = "3.12"

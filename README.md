@@ -1,5 +1,8 @@
 # dj-llm — Django + LangGraph agent
 
+[![CI](https://github.com/pavlo-mk/django-LLM/actions/workflows/ci.yml/badge.svg)](https://github.com/pavlo-mk/django-LLM/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/pavlo-mk/django-LLM/graph/badge.svg)](https://codecov.io/gh/pavlo-mk/django-LLM)
+
 A small but complete test project that wires a **Django 6** web app to a
 **LangGraph** ReAct agent running on a **local Ollama** model. Conversation
 state is persisted in **Postgres** using LangGraph's Postgres checkpointer, so
