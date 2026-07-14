@@ -5,7 +5,7 @@ name, description, and argument schema from the signature and docstring, and
 LangGraph lets the model call them by name.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from langchain_core.tools import tool
 
@@ -25,7 +25,7 @@ def multiply(a: float, b: float) -> float:
 @tool
 def current_time() -> str:
     """Return the current UTC date and time in ISO 8601 format."""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 @tool

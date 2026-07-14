@@ -1,0 +1,17 @@
+.venv/
+.git/
+.github/
+.idea/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+staticfiles/
+db.sqlite3
+*.log
+.env
+.DS_Store

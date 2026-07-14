@@ -7,9 +7,21 @@ __pycache__/
 # Django
 *.log
 db.sqlite3
+staticfiles/
+media/
+
+# Test / tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
 
 # Env / secrets
 .env
+.env.*
+!.env.example
 
 # IDE / OS
 .idea/

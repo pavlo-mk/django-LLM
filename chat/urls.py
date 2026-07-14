@@ -6,6 +6,7 @@ app_name = "chat"
 
 urlpatterns = [
     path("", views.index, name="index"),
+    path("healthz/", views.healthz, name="healthz"),
     path("api/threads/", views.create_thread, name="create_thread"),
     path("api/threads/<uuid:thread_id>/messages/", views.thread_messages, name="messages"),
     path("api/chat/", views.chat, name="chat"),

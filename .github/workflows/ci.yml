@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.13"
+      - name: Install dependencies
+        run: uv sync --dev --frozen
+      - name: Ruff lint (PEP 8, pyflakes, imports)
+        run: uv run ruff check .
+      - name: Ruff format check
+        run: uv run ruff format --check .
+
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.13"
+      - name: Install dependencies
+        run: uv sync --dev --frozen
+      - name: mypy type check
+        run: uv run mypy .
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+
+    env:
+      DJANGO_SECRET_KEY: ci-secret-key
+      DJANGO_SETTINGS_MODULE: config.settings
+      # Point Django + the checkpointer at the Postgres service below.
+      POSTGRES_DB: djllm
+      POSTGRES_USER: djllm
+      POSTGRES_PASSWORD: djllm
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: djllm
+          POSTGRES_USER: djllm
+          POSTGRES_PASSWORD: djllm
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: uv sync --dev --frozen
+
+      - name: Django system checks
+        run: uv run python manage.py check
+
+      - name: Run tests (fails if coverage drops below 70%)
+        run: uv run pytest --cov-report=xml --cov-fail-under=70
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.xml
+          fail_ci_if_error: false

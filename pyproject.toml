@@ -1,0 +1,97 @@
+[project]
+name = "dj-llm"
+version = "0.1.0"
+description = "Django + LangGraph agent test project"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "django>=6.0,<7",
+    "psycopg[binary]>=3.3",
+    "langgraph>=1.2",
+    "langchain-ollama>=1.1",
+    "langgraph-checkpoint-postgres>=3.1",
+    "python-dotenv>=1.0",
+    "uvicorn[standard]>=0.51.0",
+    "pydantic-settings>=2.5",
+    "structlog>=24.4",
+    "sentry-sdk[django]>=2.0",
+    "whitenoise>=6.7",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.9",
+    "mypy>=1.13",
+    "pytest>=8.3",
+    "pytest-django>=4.9",
+    "pytest-cov>=5.0",
+    "pytest-asyncio>=0.24",
+    "pre-commit>=4.0",
+]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+python_files = ["tests.py", "test_*.py", "*_tests.py"]
+asyncio_mode = "auto"
+addopts = "--cov --cov-report=term-missing"
+filterwarnings = [
+    # WhiteNoise notices STATIC_ROOT isn't collected in the dev/test env.
+    "ignore:No directory at:UserWarning",
+    # Async test leaves a connection in asgiref's worker thread, so the test
+    # DB drop reports a lingering session on teardown. Harmless (ephemeral DB).
+    "ignore:Error when trying to teardown test databases:",
+]
+
+[tool.coverage.run]
+# include (globs relative to the repo root) keeps filenames repo-root-relative
+# — agent/graph.py, chat/admin.py — with a single "." source, so Codecov maps
+# them unambiguously (no agent/__init__.py vs chat/__init__.py collision).
+include = ["agent/*", "chat/*"]
+omit = ["*/migrations/*", "*/tests.py"]
+relative_files = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["*/migrations/*"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle (PEP 8)
+    "F",        # pyflakes
+    "I",        # import sorting (isort)
+    "UP",       # pyupgrade (modernize syntax)
+    "B",        # bugbear (likely bugs)
+    "C4",       # flake8-comprehensions
+    "SIM",      # flake8-simplify
+    "RET",      # flake8-return
+    "PIE",      # flake8-pie (misc lints)
+    "N",        # pep8-naming
+    "DJ",       # flake8-django
+    "ASYNC",    # async gotchas (e.g. blocking calls in async code)
+    "S",        # flake8-bandit (security)
+    "PTH",      # prefer pathlib over os.path
+    "LOG", "G", # logging correctness
+    "RUF",      # ruff-specific rules
+]
+
+[tool.ruff.lint.per-file-ignores]
+"chat/tests.py" = ["S101"]            # asserts are the point of tests
+"config/appconfig.py" = ["S105"]      # documented insecure dev defaults
+# Django uses declarative class-level list/tuple attributes by design.
+"chat/models.py" = ["RUF012"]
+"chat/admin.py" = ["RUF012"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["agent", "chat", "config"]
+exclude = ['migrations/']
+ignore_missing_imports = true      # langgraph/langchain/psycopg have no stubs
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+[[tool.mypy.overrides]]
+# Django adds attributes at runtime that static analysis can't see.
+module = ["*.migrations.*"]
+ignore_errors = true
