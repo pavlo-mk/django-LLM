@@ -16,6 +16,9 @@ dependencies = [
     "structlog>=24.4",
     "sentry-sdk[django]>=2.0",
     "whitenoise>=6.7",
+    "langchain-postgres>=0.0.12",
+    "langchain-text-splitters>=0.3",
+    "pypdf>=5.0",
 ]
 
 [dependency-groups]

@@ -40,3 +40,21 @@ class Message(models.Model):
     def __str__(self) -> str:
         preview = self.content[:40]
         return f"[{self.role}] {preview}"
+
+
+class Document(models.Model):
+    """Metadata about a source ingested into the RAG knowledge base.
+
+    The actual embedded chunks live in the pgvector tables managed by
+    langchain-postgres; this row is a human-readable record for the admin/UI."""
+
+    source = models.CharField(max_length=255)
+    char_count = models.PositiveIntegerField(default=0)
+    chunk_count = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.source} ({self.chunk_count} chunks)"
