@@ -150,10 +150,16 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Ollama connection + model used by the agent.
 OLLAMA_BASE_URL = env.ollama_base_url
 OLLAMA_MODEL = env.ollama_model
+OLLAMA_EMBED_MODEL = env.ollama_embed_model
 OLLAMA_TIMEOUT = env.ollama_timeout
 
 # Connection string the LangGraph Postgres checkpointer uses to persist state.
 CHECKPOINTER_DSN = env.database_dsn
+
+# RAG: pgvector store settings. langchain-postgres wants a SQLAlchemy-style URL.
+RAG_COLLECTION = env.rag_collection
+RAG_TOP_K = env.rag_top_k
+VECTOR_DSN = env.database_dsn.replace("postgresql://", "postgresql+psycopg://", 1)
 
 
 # --- Observability ----------------------------------------------------------

@@ -37,7 +37,15 @@ class AppSettings(BaseSettings):
     # Ollama / agent
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.2"
+    # Dedicated embedding model for RAG. Chat models like llama3.2 can't serve
+    # embeddings on every Ollama build (some return HTTP 501), so we default to
+    # a small dedicated embedder. Override with OLLAMA_EMBED_MODEL.
+    ollama_embed_model: str = "nomic-embed-text"
     ollama_timeout: float = 120.0  # seconds per model request
+
+    # RAG
+    rag_collection: str = "knowledge_base"
+    rag_top_k: int = 4
 
     # Observability (all optional)
     sentry_dsn: str = ""

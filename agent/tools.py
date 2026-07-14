@@ -9,6 +9,8 @@ from datetime import UTC, datetime
 
 from langchain_core.tools import tool
 
+from agent.rag import search_knowledge_base
+
 
 @tool
 def add(a: float, b: float) -> float:
@@ -34,4 +36,4 @@ def word_count(text: str) -> int:
     return len(text.split())
 
 
-TOOLS = [add, multiply, current_time, word_count]
+TOOLS = [add, multiply, current_time, word_count, search_knowledge_base]

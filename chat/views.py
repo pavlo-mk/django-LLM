@@ -11,8 +11,9 @@ from django.shortcuts import get_object_or_404, render
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 
-from agent import graph
+from agent import graph, rag_graph
 
+from . import ingestion
 from .models import Message, Thread
 
 
@@ -37,6 +38,23 @@ def healthz(request):
 def create_thread(request):
     thread = Thread.objects.create()
     return JsonResponse({"thread_id": str(thread.thread_id)})
+
+
+@require_POST
+def ingest_document(request):
+    """Ingest an uploaded file or pasted text into the RAG knowledge base."""
+    upload = request.FILES.get("file")
+    if upload is not None:
+        source = upload.name or "upload"
+        text = ingestion.read_upload(upload)
+    else:
+        text = (request.POST.get("text") or "").strip()
+        source = request.POST.get("source") or "pasted-text"
+    if not text.strip():
+        return HttpResponseBadRequest("a non-empty file or text is required")
+
+    doc = ingestion.ingest(text, source=source)
+    return JsonResponse({"source": doc.source, "chunks": doc.chunk_count})
 
 
 @require_GET
@@ -102,7 +120,50 @@ async def stream(request, thread_id):
     return response
 
 
-def _sse(data: str, event: str | None = None) -> str:
+async def rag_stream(request, thread_id):
+    """Streaming turn using the dedicated retrieve→generate RAG pipeline.
+
+    Emits a ``sources`` event (the retrieved document names) before the answer
+    tokens, so the UI can show what the answer was grounded in.
+    """
+    if request.method != "GET":
+        return HttpResponseBadRequest("GET only")
+    text = (request.GET.get("message") or "").strip()
+    if not text:
+        return HttpResponseBadRequest("message is required")
+
+    try:
+        thread = await Thread.objects.aget(thread_id=thread_id)
+    except Thread.DoesNotExist as exc:
+        raise Http404("thread not found") from exc
+
+    await Message.objects.acreate(thread=thread, role=Message.Role.USER, content=text)
+    await _atouch_title(thread, text)
+
+    async def event_stream():
+        collected: list[str] = []
+        try:
+            async for kind, data in rag_graph.arag_stream(text):
+                if kind == "sources":
+                    yield _sse(data, event="sources")
+                else:
+                    collected.append(str(data))
+                    yield _sse(str(data))
+        finally:
+            await Message.objects.acreate(
+                thread=thread,
+                role=Message.Role.ASSISTANT,
+                content="".join(collected),
+            )
+        yield _sse("", event="done")
+
+    response = StreamingHttpResponse(event_stream(), content_type="text/event-stream")
+    response["Cache-Control"] = "no-cache"
+    response["X-Accel-Buffering"] = "no"
+    return response
+
+
+def _sse(data: object, event: str | None = None) -> str:
     """Format one Server-Sent Event. Data is JSON-encoded to stay single-line."""
     prefix = f"event: {event}\n" if event else ""
     return f"{prefix}data: {json.dumps(data)}\n\n"

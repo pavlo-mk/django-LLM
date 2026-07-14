@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Message, Thread
+from .models import Document, Message, Thread
 
 
 class MessageInline(admin.TabularInline):
@@ -22,3 +22,9 @@ class MessageAdmin(admin.ModelAdmin):
     list_display = ("thread", "role", "created_at")
     list_filter = ("role",)
     search_fields = ("content",)
+
+
+@admin.register(Document)
+class DocumentAdmin(admin.ModelAdmin):
+    list_display = ("source", "chunk_count", "char_count", "created_at")
+    search_fields = ("source",)

@@ -14,23 +14,25 @@
     }
     header {
       padding: .75rem 1rem; border-bottom: 1px solid #8883;
-      display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+      display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
     }
     header h1 { font-size: 1rem; margin: 0; font-weight: 600; }
     header .muted { color: #8888; font-size: .8rem; }
     header .spacer { flex: 1; }
-    button, select, input {
+    button, select, input, label.filebtn {
       font: inherit; padding: .4rem .6rem; border-radius: 6px;
       border: 1px solid #8886; background: Canvas; color: CanvasText;
     }
-    button { cursor: pointer; }
+    button, label.filebtn { cursor: pointer; }
     button.primary { background: #2563eb; color: white; border-color: #2563eb; }
-    label.toggle { font-size: .85rem; display: flex; align-items: center; gap: .35rem; }
+    label.toggle { font-size: .85rem; display: flex; align-items: center; gap: .35rem; border: 0; padding: 0; }
+    #status { font-size: .8rem; color: #8888; }
     #messages { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: .75rem; }
     .msg { max-width: 70ch; padding: .6rem .8rem; border-radius: 10px; white-space: pre-wrap; line-height: 1.4; }
     .msg.user { align-self: flex-end; background: #2563eb; color: white; }
     .msg.assistant { align-self: flex-start; background: #8882; }
     .msg.assistant.pending { opacity: .7; }
+    .msg .sources { font-size: .72rem; color: #888a; margin-bottom: .3rem; }
     form { display: flex; gap: .5rem; padding: 1rem; border-top: 1px solid #8883; }
     form input[type=text] { flex: 1; }
     .empty { color: #8888; margin: auto; text-align: center; }
@@ -41,12 +43,18 @@
     <h1>Django + LangGraph</h1>
     <span class="muted">model: {{ model }}</span>
     <div class="spacer"></div>
+    <span id="status"></span>
+    <select id="mode" title="Which pipeline answers">
+      <option value="agent">Agent (tools + RAG)</option>
+      <option value="rag">RAG only</option>
+    </select>
     <label class="toggle"><input type="checkbox" id="streamToggle" checked> stream</label>
+    <label class="filebtn">＋ doc<input type="file" id="docFile" accept=".txt,.md,.markdown,.pdf" hidden></label>
     <button id="newChat">+ New chat</button>
   </header>
 
   <div id="messages">
-    <div class="empty">Start a new chat and ask, e.g. <em>"What is 23 × 19, and what time is it?"</em></div>
+    <div class="empty">Start a chat. Try <em>"What is the Zorblax 3000 warranty?"</em> after ingesting the sample doc, or add your own via <strong>＋ doc</strong>.</div>
   </div>
 
   <form id="chatForm">
@@ -60,6 +68,9 @@
     const input = document.getElementById("input");
     const sendBtn = document.getElementById("send");
     const streamToggle = document.getElementById("streamToggle");
+    const modeSelect = document.getElementById("mode");
+    const statusEl = document.getElementById("status");
+    const docFile = document.getElementById("docFile");
     let threadId = null;
 
     function csrf() {
@@ -67,61 +78,84 @@
       return m ? m[1] : "";
     }
 
-    function addMessage(role, text, opts = {}) {
-      if (messagesEl.querySelector(".empty")) messagesEl.innerHTML = "";
+    function clearEmpty() {
+      const e = messagesEl.querySelector(".empty");
+      if (e) messagesEl.innerHTML = "";
+    }
+
+    function addUser(text) {
+      clearEmpty();
       const el = document.createElement("div");
-      el.className = "msg " + role + (opts.pending ? " pending" : "");
+      el.className = "msg user";
       el.textContent = text;
       messagesEl.appendChild(el);
       messagesEl.scrollTop = messagesEl.scrollHeight;
-      return el;
+    }
+
+    function addAssistant() {
+      clearEmpty();
+      const el = document.createElement("div");
+      el.className = "msg assistant pending";
+      const sources = document.createElement("div");
+      sources.className = "sources"; sources.style.display = "none";
+      const body = document.createElement("span");
+      el.append(sources, body);
+      messagesEl.appendChild(el);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      return { el, sources, body };
     }
 
     async function ensureThread() {
       if (threadId) return threadId;
-      const res = await fetch("/api/threads/", {
-        method: "POST",
-        headers: { "X-CSRFToken": csrf() },
-      });
+      const res = await fetch("/api/threads/", { method: "POST", headers: { "X-CSRFToken": csrf() } });
       threadId = (await res.json()).thread_id;
       return threadId;
     }
 
-    async function newChat() {
+    function newChat() {
       threadId = null;
       messagesEl.innerHTML = '<div class="empty">New chat — say hello 👋</div>';
     }
 
-    async function sendStreaming(text) {
-      const tid = await ensureThread();
-      addMessage("user", text);
-      const bubble = addMessage("assistant", "", { pending: true });
-      const url = `/api/threads/${tid}/stream/?message=` + encodeURIComponent(text);
+    function streamFrom(url, bubble) {
       const es = new EventSource(url);
       es.onmessage = (e) => {
-        bubble.textContent += JSON.parse(e.data);
+        bubble.body.textContent += JSON.parse(e.data);
         messagesEl.scrollTop = messagesEl.scrollHeight;
       };
+      es.addEventListener("sources", (e) => {
+        const list = JSON.parse(e.data);
+        bubble.sources.textContent = "📚 sources: " + (list.length ? list.join(", ") : "none");
+        bubble.sources.style.display = "block";
+      });
       es.addEventListener("done", () => { es.close(); finish(bubble); });
       es.onerror = () => { es.close(); finish(bubble); };
     }
 
+    async function sendStreaming(text) {
+      const tid = await ensureThread();
+      addUser(text);
+      const bubble = addAssistant();
+      const path = modeSelect.value === "rag" ? "rag" : "stream";
+      streamFrom(`/api/threads/${tid}/${path}/?message=` + encodeURIComponent(text), bubble);
+    }
+
     async function sendBlocking(text) {
       const tid = await ensureThread();
-      addMessage("user", text);
-      const bubble = addMessage("assistant", "…", { pending: true });
+      addUser(text);
+      const bubble = addAssistant();
+      bubble.body.textContent = "…";
       const res = await fetch("/api/chat/", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-CSRFToken": csrf() },
         body: JSON.stringify({ thread_id: tid, message: text }),
       });
-      const data = await res.json();
-      bubble.textContent = data.reply;
+      bubble.body.textContent = (await res.json()).reply;
       finish(bubble);
     }
 
     function finish(bubble) {
-      bubble.classList.remove("pending");
+      bubble.el.classList.remove("pending");
       sendBtn.disabled = false;
       input.focus();
     }
@@ -133,12 +167,29 @@
       input.value = "";
       sendBtn.disabled = true;
       try {
-        if (streamToggle.checked) await sendStreaming(text);
+        // RAG has no blocking endpoint, so it always streams.
+        if (modeSelect.value === "rag" || streamToggle.checked) await sendStreaming(text);
         else await sendBlocking(text);
       } catch (err) {
-        addMessage("assistant", "⚠️ " + err);
+        addAssistant().body.textContent = "⚠️ " + err;
         sendBtn.disabled = false;
       }
+    });
+
+    docFile.addEventListener("change", async () => {
+      const file = docFile.files[0];
+      if (!file) return;
+      statusEl.textContent = `ingesting ${file.name}…`;
+      const fd = new FormData();
+      fd.append("file", file);
+      try {
+        const res = await fetch("/api/ingest/", { method: "POST", headers: { "X-CSRFToken": csrf() }, body: fd });
+        const data = await res.json();
+        statusEl.textContent = res.ok ? `✓ ${data.source}: ${data.chunks} chunks` : `⚠️ ${data.error || "ingest failed"}`;
+      } catch (err) {
+        statusEl.textContent = "⚠️ " + err;
+      }
+      docFile.value = "";
     });
 
     document.getElementById("newChat").addEventListener("click", newChat);

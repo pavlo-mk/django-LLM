@@ -7,6 +7,9 @@ install:            ## Install deps + dev tools and git hooks
 run:                ## Run the ASGI server locally (async streaming works here)
 	uv run uvicorn config.asgi:application --reload
 
+ingest:             ## Ingest the sample docs into the RAG knowledge base
+	uv run python manage.py ingest sample_docs/
+
 test:               ## Run the test suite
 	uv run pytest
 

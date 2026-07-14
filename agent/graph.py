@@ -29,13 +29,15 @@ log = structlog.get_logger(__name__)
 
 SYSTEM_PROMPT = (
     "You are a concise, helpful assistant running inside a Django demo app. "
-    "You have tools for arithmetic, the current time, and counting words. "
-    "Use a tool whenever it gives a more accurate answer than guessing, and "
-    "otherwise answer directly."
+    "You have tools for arithmetic, the current time, counting words, and "
+    "searching an ingested knowledge base. Call search_knowledge_base whenever "
+    "the user asks about specific documents or domain facts you don't already "
+    "know. Use a tool whenever it gives a more accurate answer than guessing, "
+    "and otherwise answer directly."
 )
 
 
-def _build_llm() -> ChatOllama:
+def build_llm() -> ChatOllama:
     # client_kwargs are forwarded to the underlying httpx client, giving us a
     # per-request timeout so a hung model can't hang the web worker forever.
     return ChatOllama(
@@ -50,7 +52,7 @@ def _build_llm() -> ChatOllama:
 def get_agent() -> CompiledStateGraph:
     """Build (once) and return the compiled sync ReAct agent."""
     return create_react_agent(
-        _build_llm(),
+        build_llm(),
         tools=TOOLS,
         prompt=SYSTEM_PROMPT,
         checkpointer=get_checkpointer(),
@@ -62,7 +64,7 @@ async def get_async_agent() -> CompiledStateGraph:
     global _async_agent
     if _async_agent is None:
         _async_agent = create_react_agent(
-            _build_llm(),
+            build_llm(),
             tools=TOOLS,
             prompt=SYSTEM_PROMPT,
             checkpointer=await get_async_checkpointer(),
