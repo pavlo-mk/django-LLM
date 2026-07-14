@@ -26,3 +26,6 @@ htmlcov/
 # IDE / OS
 .idea/
 .DS_Store
+
+# Claude Code per-user local settings
+.claude/settings.local.json
