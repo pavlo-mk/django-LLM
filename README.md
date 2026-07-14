@@ -201,5 +201,5 @@ secret/debug/hosts, Postgres connection, `OLLAMA_BASE_URL` / `OLLAMA_MODEL` /
 - Add per-user threads by attaching `Thread` to `request.user`.
 - Add LangSmith tracing (set the env vars) to inspect each agent step.
 
-<img width="756" height="643" alt="image" src="https://github.com/user-attachments/assets/e44e60aa-4400-4522-9be7-1bc6723ed377" />
+<img width="722" height="490" alt="image" src="https://github.com/user-attachments/assets/69ce473b-41c4-45bf-a282-4626bb4a71e0" />
 
