@@ -349,7 +349,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.5" },
     { name = "pypdf", specifier = ">=5.0" },
     { name = "python-dotenv", specifier = ">=1.0" },
-    { name = "sentry-sdk", extras = ["django"], specifier = ">=2.0" },
+    { name = "sentry-sdk", extras = ["django"], specifier = ">=2.65.0" },
     { name = "structlog", specifier = ">=24.4" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.51.0" },
     { name = "whitenoise", specifier = ">=6.7" },
