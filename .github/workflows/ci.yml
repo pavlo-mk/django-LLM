@@ -87,8 +87,8 @@ jobs:
       - name: Django system checks
         run: uv run python manage.py check
 
-      - name: Run tests (fails if coverage drops below 70%)
-        run: uv run pytest --cov-report=xml --cov-fail-under=70
+      - name: Run tests (fails if coverage drops below 85%)
+        run: uv run pytest --cov-report=xml --cov-fail-under=85
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v7

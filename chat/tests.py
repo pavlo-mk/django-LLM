@@ -6,11 +6,12 @@ An end-to-end smoke test that actually calls the model lives behind a flag.
 
 import os
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from django.test import AsyncClient, TestCase
 from langchain_core.documents import Document as LCDocument
+from langchain_core.messages import AIMessageChunk
 
 from agent.tools import add, current_time, multiply, word_count
 
@@ -224,3 +225,301 @@ class AgentSmokeTest(TestCase):
             "What is the Qwix warranty? Search the knowledge base.",
         )
         self.assertTrue("nine" in reply.lower() or "9" in reply)
+
+
+# ---------------------------------------------------------------------------
+# Unit tests that mock the Ollama / pgvector / DB boundaries, so the agent
+# plumbing is exercised without live services.
+# ---------------------------------------------------------------------------
+
+
+class GraphUnitTests(TestCase):
+    def test_token_helper(self):
+        from agent.graph import _token
+
+        self.assertEqual(_token(AIMessageChunk(content="hi")), "hi")
+        self.assertEqual(_token("not a chunk"), "")
+        self.assertEqual(_token(AIMessageChunk(content=[{"x": 1}])), "")
+
+    @patch("agent.graph.ChatOllama")
+    def test_build_llm(self, mock_chat):
+        from agent import graph
+
+        graph.build_llm()
+        mock_chat.assert_called_once()
+
+    @patch("agent.graph.create_react_agent", return_value="AGENT")
+    @patch("agent.graph.get_checkpointer")
+    @patch("agent.graph.build_llm")
+    def test_get_agent(self, mock_llm, mock_ckpt, mock_cra):
+        from agent import graph
+
+        graph.get_agent.cache_clear()
+        self.assertEqual(graph.get_agent(), "AGENT")
+        mock_cra.assert_called_once()
+        graph.get_agent.cache_clear()
+
+    @patch("agent.graph.get_agent")
+    def test_run(self, mock_get_agent):
+        from agent import graph
+
+        agent = MagicMock()
+        agent.invoke.return_value = {"messages": [MagicMock(content="answer")]}
+        mock_get_agent.return_value = agent
+        self.assertEqual(graph.run("tid", "hi"), "answer")
+
+    @patch("agent.graph.get_agent")
+    def test_stream_tokens(self, mock_get_agent):
+        from agent import graph
+
+        agent = MagicMock()
+        agent.stream.return_value = [
+            (AIMessageChunk(content="a"), {}),
+            ("not-a-chunk", {}),
+            (AIMessageChunk(content="b"), {}),
+        ]
+        mock_get_agent.return_value = agent
+        self.assertEqual(list(graph.stream_tokens("tid", "hi")), ["a", "b"])
+
+
+async def test_get_async_agent(monkeypatch):
+    from agent import graph
+
+    graph._async_agent = None
+    monkeypatch.setattr(graph, "build_llm", MagicMock(return_value="LLM"))
+    monkeypatch.setattr(graph, "get_async_checkpointer", AsyncMock(return_value="CK"))
+    monkeypatch.setattr(graph, "create_react_agent", MagicMock(return_value="AGENT"))
+    assert await graph.get_async_agent() == "AGENT"
+    graph._async_agent = None
+
+
+async def test_astream_tokens(monkeypatch):
+    from agent import graph
+
+    class _FakeAgent:
+        async def astream(self, _input, _config, stream_mode=None):
+            for chunk in [AIMessageChunk(content="a"), "x", AIMessageChunk(content="b")]:
+                yield chunk, {}
+
+    monkeypatch.setattr(graph, "get_async_agent", AsyncMock(return_value=_FakeAgent()))
+    out = [t async for t in graph.astream_tokens("tid", "hi")]
+    assert out == ["a", "b"]
+
+
+class RagStoreUnitTests(TestCase):
+    @patch("agent.rag.OllamaEmbeddings")
+    def test_get_embeddings(self, mock_emb):
+        from agent import rag
+
+        rag.get_embeddings.cache_clear()
+        rag.get_embeddings()
+        mock_emb.assert_called_once()
+        rag.get_embeddings.cache_clear()
+
+    @patch("agent.rag.PGVector")
+    @patch("agent.rag.get_embeddings")
+    def test_get_vectorstore(self, mock_emb, mock_pg):
+        from agent import rag
+
+        rag.get_vectorstore.cache_clear()
+        rag.get_vectorstore()
+        mock_pg.assert_called_once()
+        rag.get_vectorstore.cache_clear()
+
+    @patch("agent.rag.get_vectorstore")
+    def test_ingest_text(self, mock_gv):
+        from agent import rag
+
+        store = MagicMock()
+        mock_gv.return_value = store
+        n = rag.ingest_text("hello world foo bar", source="s.txt")
+        self.assertGreaterEqual(n, 1)
+        store.add_documents.assert_called_once()
+
+    @patch("agent.rag.get_vectorstore")
+    def test_search(self, mock_gv):
+        from agent import rag
+
+        store = MagicMock()
+        store.similarity_search.return_value = ["doc"]
+        mock_gv.return_value = store
+        self.assertEqual(rag.search("q"), ["doc"])
+
+
+async def test_asearch(monkeypatch):
+    from agent import rag
+
+    monkeypatch.setattr(rag, "search", lambda q, k: ["d"])
+    assert await rag.asearch("q") == ["d"]
+
+
+async def test_arag_answer(monkeypatch):
+    from agent import rag_graph
+
+    async def fake_asearch(q, k=None):
+        return [LCDocument(page_content="5 years", metadata={"source": "m"})]
+
+    llm = MagicMock()
+    llm.ainvoke = AsyncMock(return_value=MagicMock(content="5 years."))
+    monkeypatch.setattr(rag_graph, "asearch", fake_asearch)
+    monkeypatch.setattr(rag_graph, "build_llm", lambda: llm)
+    rag_graph.get_rag_graph.cache_clear()
+
+    res = await rag_graph.arag_answer("how long?")
+    assert res["answer"] == "5 years."
+    assert res["sources"] == ["m"]
+    rag_graph.get_rag_graph.cache_clear()
+
+
+async def test_arag_stream(monkeypatch):
+    from agent import rag_graph
+
+    async def fake_asearch(q, k=None):
+        return [LCDocument(page_content="x", metadata={"source": "m"})]
+
+    async def fake_astream(_prompt):
+        for tok in ["5 ", "years."]:
+            yield AIMessageChunk(content=tok)
+
+    llm = MagicMock()
+    llm.astream = fake_astream
+    monkeypatch.setattr(rag_graph, "asearch", fake_asearch)
+    monkeypatch.setattr(rag_graph, "build_llm", lambda: llm)
+
+    kinds, toks = [], []
+    async for kind, data in rag_graph.arag_stream("q"):
+        kinds.append(kind)
+        if kind == "token":
+            toks.append(data)
+    assert "sources" in kinds
+    assert "".join(toks) == "5 years."
+
+
+class CheckpointerUnitTests(TestCase):
+    @patch("agent.checkpointer.PostgresSaver")
+    @patch("agent.checkpointer.ConnectionPool")
+    def test_get_checkpointer(self, mock_pool, mock_saver):
+        from agent import checkpointer
+
+        checkpointer._checkpointer = None
+        checkpointer._pool = None
+        saver = MagicMock()
+        mock_saver.return_value = saver
+        cp = checkpointer.get_checkpointer()
+        saver.setup.assert_called_once()
+        self.assertIs(cp, saver)
+        checkpointer._checkpointer = None
+        checkpointer._pool = None
+
+
+async def test_get_async_checkpointer(monkeypatch):
+    from agent import checkpointer
+
+    checkpointer._async_checkpointer = None
+    checkpointer._async_pool = None
+    pool = MagicMock()
+    pool.open = AsyncMock()
+    saver = MagicMock()
+    saver.setup = AsyncMock()
+    monkeypatch.setattr(checkpointer, "AsyncConnectionPool", MagicMock(return_value=pool))
+    monkeypatch.setattr(checkpointer, "AsyncPostgresSaver", MagicMock(return_value=saver))
+
+    cp = await checkpointer.get_async_checkpointer()
+    saver.setup.assert_awaited_once()
+    assert cp is saver
+    checkpointer._async_checkpointer = None
+    checkpointer._async_pool = None
+
+
+class IngestionReadTests(TestCase):
+    def test_read_upload_text(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from chat.ingestion import read_upload
+
+        f = SimpleUploadedFile("note.txt", b"hello text", content_type="text/plain")
+        self.assertEqual(read_upload(f), "hello text")
+
+    def test_pdf_reading(self):
+        import io
+        import tempfile
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from pypdf import PdfWriter
+
+        from chat.ingestion import read_path, read_upload
+
+        writer = PdfWriter()
+        writer.add_blank_page(width=72, height=72)
+        buf = io.BytesIO()
+        writer.write(buf)
+        data = buf.getvalue()
+
+        # upload branch → _read_pdf
+        read_upload(SimpleUploadedFile("d.pdf", data, content_type="application/pdf"))
+        # path branch → _read_pdf
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "d.pdf"
+            p.write_bytes(data)
+            read_path(p)
+
+
+class IngestCommandEdgeTests(TestCase):
+    def test_missing_path(self):
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        with self.assertRaises(CommandError):
+            call_command("ingest", "/nope/does-not-exist")
+
+    def test_no_ingestible_files(self):
+        import tempfile
+
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "x.bin").write_text("data", encoding="utf-8")
+            with self.assertRaises(CommandError):
+                call_command("ingest", d)
+
+    @patch("chat.ingestion.ingest_text", return_value=0)
+    def test_skips_empty_file(self, _mock):
+        import tempfile
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "empty.md").write_text("   ", encoding="utf-8")
+            out = StringIO()
+            call_command("ingest", d, stdout=out)
+        self.assertIn("skip", out.getvalue())
+
+
+class ModelStrTests(TestCase):
+    def test_str_reprs(self):
+        thread = Thread.objects.create()
+        self.assertIn("Thread", str(thread))
+        thread.title = "Greeting"
+        self.assertEqual(str(thread), "Greeting")
+
+        msg = Message.objects.create(thread=thread, role="user", content="hello there")
+        self.assertIn("hello there", str(msg))
+
+        doc = Document.objects.create(source="s.txt", chunk_count=3)
+        self.assertIn("s.txt", str(doc))
+
+
+class ViewSmokeTests(TestCase):
+    def test_index(self):
+        self.assertEqual(self.client.get("/").status_code, 200)
+
+    def test_healthz(self):
+        self.assertEqual(self.client.get("/healthz/").json()["status"], "ok")
+
+    def test_thread_messages(self):
+        thread = Thread.objects.create()
+        Message.objects.create(thread=thread, role="user", content="hi")
+        res = self.client.get(f"/api/threads/{thread.thread_id}/messages/")
+        self.assertEqual(len(res.json()["messages"]), 1)

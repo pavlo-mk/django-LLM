@@ -98,3 +98,8 @@ warn_redundant_casts = true
 # Django adds attributes at runtime that static analysis can't see.
 module = ["*.migrations.*"]
 ignore_errors = true
+
+[[tool.mypy.overrides]]
+# The test module is heavy on mocks/monkeypatching; typing it adds noise.
+module = ["chat.tests"]
+ignore_errors = true
