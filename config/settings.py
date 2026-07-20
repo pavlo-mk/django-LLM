@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "accounts",
     "chat",
 ]
 
@@ -143,6 +144,23 @@ STORAGES = {
 }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+
+# --- Auth / email -----------------------------------------------------------
+
+# Session login is used by the JSON auth endpoints under /api/auth/.
+LOGIN_URL = "/api/auth/login/"
+
+EMAIL_BACKEND = env.email_backend
+EMAIL_HOST = env.email_host
+EMAIL_PORT = env.email_port
+EMAIL_HOST_USER = env.email_host_user
+EMAIL_HOST_PASSWORD = env.email_host_password
+EMAIL_USE_TLS = env.email_use_tls
+DEFAULT_FROM_EMAIL = env.default_from_email
+
+# Frontend route that receives ?uid=&token= from the reset email.
+PASSWORD_RESET_FRONTEND_URL = env.password_reset_frontend_url
 
 
 # --- LangGraph agent configuration -----------------------------------------

@@ -49,7 +49,7 @@ filterwarnings = [
 # include (globs relative to the repo root) keeps filenames repo-root-relative
 # — agent/graph.py, chat/admin.py — with a single "." source, so Codecov maps
 # them unambiguously (no agent/__init__.py vs chat/__init__.py collision).
-include = ["agent/*", "chat/*"]
+include = ["agent/*", "accounts/*", "chat/*"]
 omit = ["*/migrations/*", "*/tests.py"]
 relative_files = true
 
@@ -79,6 +79,7 @@ select = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
+"accounts/tests.py" = ["S101", "S106"]  # asserts and test passwords
 "chat/tests.py" = ["S101"]            # asserts are the point of tests
 "config/appconfig.py" = ["S105"]      # documented insecure dev defaults
 # Django uses declarative class-level list/tuple attributes by design.
@@ -87,7 +88,7 @@ select = [
 
 [tool.mypy]
 python_version = "3.12"
-files = ["agent", "chat", "config"]
+files = ["accounts", "agent", "chat", "config"]
 exclude = ['migrations/']
 ignore_missing_imports = true      # langgraph/langchain/psycopg have no stubs
 check_untyped_defs = true
