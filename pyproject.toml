@@ -23,7 +23,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "ruff>=0.9",
+    "ruff>=0.15.22",
     "mypy>=1.13",
     "pytest>=8.3",
     "pytest-django>=4.9",
