@@ -523,3 +523,61 @@ class ViewSmokeTests(TestCase):
         Message.objects.create(thread=thread, role="user", content="hi")
         res = self.client.get(f"/api/threads/{thread.thread_id}/messages/")
         self.assertEqual(len(res.json()["messages"]), 1)
+
+
+class DfStatsCommandTests(TestCase):
+    """The pandas/numpy playground command."""
+
+    def _run(self, *args):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        out = StringIO()
+        call_command("dfstats", *args, stdout=out)
+        return out.getvalue()
+
+    def test_demo_needs_no_database(self):
+        out = self._run("--demo", "40", "--top", "3")
+        self.assertIn("40 messages from 40 synthetic rows", out)
+        self.assertIn("busiest threads (top 3)", out)
+        self.assertIn("daily volume", out)
+
+    def test_demo_is_deterministic(self):
+        self.assertEqual(self._run("--demo", "20"), self._run("--demo", "20"))
+
+    def test_reads_messages_and_writes_csv(self):
+        import tempfile
+
+        thread = Thread.objects.create(title="Vectors")
+        Message.objects.create(thread=thread, role="user", content="what is a vector")
+        Message.objects.create(thread=thread, role="assistant", content="a list of numbers")
+
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "messages.csv"
+            out = self._run("--days", "7", "--csv", str(path))
+            rows = path.read_text(encoding="utf-8").splitlines()
+
+        self.assertIn("2 messages from database", out)
+        self.assertIn("Vectors", out)
+        self.assertEqual(len(rows), 3)  # header + 2 messages
+
+    def test_empty_database_is_an_error(self):
+        from django.core.management.base import CommandError
+
+        with self.assertRaises(CommandError):
+            self._run()
+
+    def test_load_frame_empty_is_columnless(self):
+        from chat.management.commands.dfstats import load_frame
+
+        self.assertTrue(load_frame(None).empty)
+
+    def test_sparkline(self):
+        import numpy as np
+
+        from chat.management.commands.dfstats import BLOCKS, sparkline
+
+        self.assertEqual(sparkline(np.array([])), "")
+        self.assertEqual(sparkline(np.zeros(3)), BLOCKS[0] * 3)
+        self.assertEqual(sparkline(np.arange(8))[-1], BLOCKS[-1])

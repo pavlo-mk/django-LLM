@@ -74,6 +74,11 @@ Prefix commands with `uv run`, or activate the env once with
 `source .venv/bin/activate`. There's also a `Makefile` — `make install`,
 `make run`, `make test`, `make check`, `make up`.
 
+`python manage.py dfstats` summarizes the chat history with pandas/numpy
+(per-role message lengths, busiest threads, activity sparklines). Add `--csv
+out.csv` to dump the frame, or `--demo 500` to run on synthetic rows without a
+database.
+
 > **Note:** use `uvicorn` (ASGI), not `manage.py runserver` (WSGI) — the async
 > SSE streaming endpoint requires an ASGI server.
 

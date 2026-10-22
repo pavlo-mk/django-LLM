@@ -56,6 +56,16 @@ class AppSettings(BaseSettings):
     # Overrides the derived DSN below if set (e.g. a managed connection string).
     checkpointer_dsn: str = ""
 
+    # Email (password reset). Console backend prints messages in dev.
+    email_backend: str = "django.core.mail.backends.console.EmailBackend"
+    email_host: str = ""
+    email_port: int = 587
+    email_host_user: str = ""
+    email_host_password: str = ""
+    email_use_tls: bool = True
+    default_from_email: str = "noreply@localhost"
+    password_reset_frontend_url: str = "http://localhost:8000/reset-password"
+
     @property
     def allowed_hosts_list(self) -> list[str]:
         return [h.strip() for h in self.django_allowed_hosts.split(",") if h.strip()]
